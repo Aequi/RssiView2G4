@@ -33,6 +33,10 @@ const elements = {
   clearButton: document.querySelector("#clearButton"),
   smoothingInput: document.querySelector("#smoothingInput"),
   smoothingValue: document.querySelector("#smoothingValue"),
+  waterfallSmoothingInput: document.querySelector("#waterfallSmoothingInput"),
+  waterfallSmoothingValue: document.querySelector("#waterfallSmoothingValue"),
+  gainInput: document.querySelector("#gainInput"),
+  gainValue: document.querySelector("#gainValue"),
   waterfallRate: document.querySelector("#waterfallRate"),
   compatibilityNote: document.querySelector("#compatibilityNote"),
   compatibilityText: document.querySelector("#compatibilityText"),
@@ -57,11 +61,14 @@ const state = {
   packetRate: 0,
   lastMetricsAt: 0,
   selectedChannel: 25,
-  smoothingRetention: 0.9,
+  spectrumSmoothingRetention: 0.9,
+  waterfallSmoothingRetention: 0.9,
+  waterfallGain: 0.7,
   waterfallFps: 30,
   wakeLock: null,
   latest: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
   smoothed: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
+  waterfallSmoothed: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
   held: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
 };
 
@@ -104,13 +111,13 @@ function createSurface(canvas, container) {
 
 function buildColorLut() {
   const stops = [
-    [0.00, [7, 10, 21]],
-    [0.18, [42, 29, 114]],
-    [0.38, [23, 104, 160]],
-    [0.56, [22, 169, 168]],
-    [0.73, [120, 214, 99]],
-    [0.87, [242, 208, 77]],
-    [1.00, [255, 82, 109]],
+    [0.00, [8, 12, 34]],
+    [0.15, [56, 34, 150]],
+    [0.34, [21, 117, 194]],
+    [0.52, [20, 199, 194]],
+    [0.70, [126, 235, 113]],
+    [0.86, [255, 220, 75]],
+    [1.00, [255, 83, 105]],
   ];
   const lut = new Uint8ClampedArray(256 * 4);
 
@@ -138,7 +145,9 @@ function buildColorLut() {
 
 function rssiToColorIndex(rssi) {
   const normalized = (rssi - MIN_RSSI_DBM) / (MAX_RSSI_DBM - MIN_RSSI_DBM);
-  return Math.round(Math.max(0, Math.min(1, normalized)) * 255);
+  const clamped = Math.max(0, Math.min(1, normalized));
+  const gamma = 1.35 - state.waterfallGain * 0.95;
+  return Math.round(Math.pow(clamped, gamma) * 255);
 }
 
 function colorCss(rssi, alpha = 1) {
@@ -168,8 +177,10 @@ function frequencyForChannel(channel) {
 }
 
 function acceptPacket(packet) {
-  const retention = state.smoothingRetention;
-  const incoming = 1 - retention;
+  const spectrumRetention = state.spectrumSmoothingRetention;
+  const spectrumIncoming = 1 - spectrumRetention;
+  const waterfallRetention = state.waterfallSmoothingRetention;
+  const waterfallIncoming = 1 - waterfallRetention;
 
   for (let channel = 0; channel < PACKET_SIZE; channel += 1) {
     const rssi = -packet[channel];
@@ -177,14 +188,17 @@ function acceptPacket(packet) {
 
     if (!state.hasData) {
       state.smoothed[channel] = rssi;
+      state.waterfallSmoothed[channel] = rssi;
       state.held[channel] = rssi;
       continue;
     }
 
-    state.smoothed[channel] = state.smoothed[channel] * retention + rssi * incoming;
+    state.smoothed[channel] = state.smoothed[channel] * spectrumRetention + rssi * spectrumIncoming;
+    state.waterfallSmoothed[channel] = state.waterfallSmoothed[channel] * waterfallRetention
+      + rssi * waterfallIncoming;
     state.held[channel] = rssi > state.held[channel]
       ? rssi
-      : state.held[channel] * retention + rssi * incoming;
+      : state.held[channel] * spectrumRetention + rssi * spectrumIncoming;
   }
 
   state.hasData = true;
@@ -255,24 +269,24 @@ function drawSpectrum() {
   context.fillStyle = "#0b1017";
   context.fillRect(0, 0, width, height);
   context.lineWidth = 1;
-  context.font = "10px ui-sans-serif, system-ui, sans-serif";
+  context.font = "11px ui-sans-serif, system-ui, sans-serif";
   context.textAlign = "right";
   context.textBaseline = "middle";
 
   for (let rssi = -100; rssi <= -20; rssi += 20) {
     const y = yForRssi(rssi);
-    context.strokeStyle = rssi === -100 ? "rgba(139, 152, 170, 0.24)" : "rgba(139, 152, 170, 0.12)";
+    context.strokeStyle = rssi === -100 ? "rgba(190, 204, 222, 0.38)" : "rgba(190, 204, 222, 0.2)";
     context.beginPath();
     context.moveTo(plotLeft, y + 0.5);
     context.lineTo(plotLeft + plotWidth, y + 0.5);
     context.stroke();
-    context.fillStyle = "#738093";
+    context.fillStyle = "#b8c5d5";
     context.fillText(`${rssi}`, plotLeft - 7, y);
   }
 
   for (let frequency = 2400; frequency <= 2500; frequency += 20) {
     const x = plotLeft + (frequency - FIRST_FREQUENCY_MHZ) / 100 * plotWidth;
-    context.strokeStyle = "rgba(139, 152, 170, 0.07)";
+    context.strokeStyle = "rgba(190, 204, 222, 0.13)";
     context.beginPath();
     context.moveTo(x + 0.5, plotTop);
     context.lineTo(x + 0.5, plotBottom);
@@ -284,7 +298,7 @@ function drawSpectrum() {
   for (let channel = 0; channel < PACKET_SIZE; channel += 1) {
     const x = plotLeft + channel * channelWidth + (channelWidth - barWidth) / 2;
     const top = yForRssi(state.hasData ? state.held[channel] : MIN_RSSI_DBM);
-    context.fillStyle = colorCss(state.held[channel], 0.72);
+    context.fillStyle = colorCss(state.held[channel], 0.94);
     context.fillRect(x, top, barWidth, Math.max(1, plotBottom - top));
   }
 
@@ -311,9 +325,9 @@ function drawSpectrum() {
       if (channel === 0) context.moveTo(x, y); else context.lineTo(x, y);
     }
     context.strokeStyle = "#5ce1ff";
-    context.lineWidth = 1.6;
-    context.shadowColor = "rgba(92, 225, 255, 0.42)";
-    context.shadowBlur = 7;
+    context.lineWidth = 2;
+    context.shadowColor = "rgba(92, 225, 255, 0.68)";
+    context.shadowBlur = 9;
     context.stroke();
     context.shadowBlur = 0;
   }
@@ -327,24 +341,24 @@ function drawSpectrum() {
   context.stroke();
   context.setLineDash([]);
 
-  context.fillStyle = "#667386";
+  context.fillStyle = "#a9b7c8";
   context.textAlign = "left";
   context.textBaseline = "bottom";
   context.fillText("dBm", 6, plotTop + 2);
 }
 
 function appendWaterfallRow() {
-  historyContext.drawImage(historyCanvas, 0, 1, PACKET_SIZE, HISTORY_ROWS - 1, 0, 0, PACKET_SIZE, HISTORY_ROWS - 1);
+  historyContext.drawImage(historyCanvas, 0, 0, PACKET_SIZE, HISTORY_ROWS - 1, 0, 1, PACKET_SIZE, HISTORY_ROWS - 1);
 
   for (let channel = 0; channel < PACKET_SIZE; channel += 1) {
-    const sourceOffset = rssiToColorIndex(state.smoothed[channel]) * 4;
+    const sourceOffset = rssiToColorIndex(state.waterfallSmoothed[channel]) * 4;
     const destinationOffset = channel * 4;
     historyRow.data[destinationOffset] = colorLut[sourceOffset];
     historyRow.data[destinationOffset + 1] = colorLut[sourceOffset + 1];
     historyRow.data[destinationOffset + 2] = colorLut[sourceOffset + 2];
     historyRow.data[destinationOffset + 3] = 255;
   }
-  historyContext.putImageData(historyRow, 0, HISTORY_ROWS - 1);
+  historyContext.putImageData(historyRow, 0, 0);
 }
 
 function clearWaterfall() {
@@ -374,7 +388,7 @@ function drawWaterfall() {
   context.imageSmoothingQuality = "high";
   context.drawImage(historyCanvas, left, top, plotWidth, plotHeight);
 
-  context.strokeStyle = "rgba(230, 239, 247, 0.11)";
+  context.strokeStyle = "rgba(230, 239, 247, 0.2)";
   context.lineWidth = 1;
   for (let frequency = 2400; frequency <= 2500; frequency += 20) {
     const x = left + (frequency - FIRST_FREQUENCY_MHZ) / 100 * plotWidth;
@@ -384,8 +398,8 @@ function drawWaterfall() {
     context.stroke();
   }
 
-  context.fillStyle = "rgba(226, 235, 244, 0.58)";
-  context.font = "9px ui-sans-serif, system-ui, sans-serif";
+  context.fillStyle = "rgba(238, 245, 252, 0.88)";
+  context.font = "10px ui-sans-serif, system-ui, sans-serif";
   context.textBaseline = "bottom";
   context.textAlign = "left";
   context.fillText("2400", left, height - 5);
@@ -576,9 +590,22 @@ elements.freezeButton.addEventListener("click", () => {
   if (!state.frozen) chartDirty = true;
 });
 elements.smoothingInput.addEventListener("input", () => {
-  state.smoothingRetention = Number(elements.smoothingInput.value) / 100;
+  state.spectrumSmoothingRetention = Number(elements.smoothingInput.value) / 100;
   elements.smoothingValue.value = `${elements.smoothingInput.value}%`;
   try { localStorage.setItem("rssi-smoothing", elements.smoothingInput.value); } catch { /* Storage is optional. */ }
+});
+elements.waterfallSmoothingInput.addEventListener("input", () => {
+  state.waterfallSmoothingRetention = Number(elements.waterfallSmoothingInput.value) / 100;
+  elements.waterfallSmoothingValue.value = `${elements.waterfallSmoothingInput.value}%`;
+  try {
+    localStorage.setItem("rssi-waterfall-smoothing", elements.waterfallSmoothingInput.value);
+  } catch { /* Storage is optional. */ }
+});
+elements.gainInput.addEventListener("input", () => {
+  state.waterfallGain = Number(elements.gainInput.value) / 100;
+  elements.gainValue.value = `${elements.gainInput.value}%`;
+  try { localStorage.setItem("rssi-waterfall-gain", elements.gainInput.value); } catch { /* Storage is optional. */ }
+  chartDirty = true;
 });
 elements.waterfallRate.addEventListener("change", () => {
   state.waterfallFps = Number(elements.waterfallRate.value);
@@ -604,11 +631,25 @@ document.addEventListener("visibilitychange", () => {
 
 try {
   const storedSmoothing = localStorage.getItem("rssi-smoothing");
+  const storedWaterfallSmoothing = localStorage.getItem("rssi-waterfall-smoothing");
+  const storedWaterfallGain = localStorage.getItem("rssi-waterfall-gain");
   const storedWaterfallFps = localStorage.getItem("rssi-waterfall-fps");
   if (storedSmoothing !== null && Number(storedSmoothing) >= 0 && Number(storedSmoothing) <= 97) {
     elements.smoothingInput.value = storedSmoothing;
     elements.smoothingValue.value = `${storedSmoothing}%`;
-    state.smoothingRetention = Number(storedSmoothing) / 100;
+    state.spectrumSmoothingRetention = Number(storedSmoothing) / 100;
+  }
+  if (storedWaterfallSmoothing !== null
+      && Number(storedWaterfallSmoothing) >= 0
+      && Number(storedWaterfallSmoothing) <= 97) {
+    elements.waterfallSmoothingInput.value = storedWaterfallSmoothing;
+    elements.waterfallSmoothingValue.value = `${storedWaterfallSmoothing}%`;
+    state.waterfallSmoothingRetention = Number(storedWaterfallSmoothing) / 100;
+  }
+  if (storedWaterfallGain !== null && Number(storedWaterfallGain) >= 0 && Number(storedWaterfallGain) <= 100) {
+    elements.gainInput.value = storedWaterfallGain;
+    elements.gainValue.value = `${storedWaterfallGain}%`;
+    state.waterfallGain = Number(storedWaterfallGain) / 100;
   }
   if (["15", "30", "60"].includes(storedWaterfallFps)) {
     elements.waterfallRate.value = storedWaterfallFps;
