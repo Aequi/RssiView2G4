@@ -61,14 +61,15 @@ const state = {
   packetRate: 0,
   lastMetricsAt: 0,
   selectedChannel: 25,
-  spectrumSmoothingRetention: 0.9,
-  waterfallSmoothingRetention: 0.9,
-  waterfallGain: 0.7,
+  spectrumSmoothingRetention: 0.85,
+  waterfallSmoothingRetention: 0.5,
+  waterfallGain: 0,
   waterfallFps: 30,
   wakeLock: null,
   latest: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
   smoothed: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
   waterfallSmoothed: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
+  waterfallPeak: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
   held: new Float32Array(PACKET_SIZE).fill(MIN_RSSI_DBM),
 };
 
@@ -179,8 +180,6 @@ function frequencyForChannel(channel) {
 function acceptPacket(packet) {
   const spectrumRetention = state.spectrumSmoothingRetention;
   const spectrumIncoming = 1 - spectrumRetention;
-  const waterfallRetention = state.waterfallSmoothingRetention;
-  const waterfallIncoming = 1 - waterfallRetention;
 
   for (let channel = 0; channel < PACKET_SIZE; channel += 1) {
     const rssi = -packet[channel];
@@ -189,13 +188,13 @@ function acceptPacket(packet) {
     if (!state.hasData) {
       state.smoothed[channel] = rssi;
       state.waterfallSmoothed[channel] = rssi;
+      state.waterfallPeak[channel] = rssi;
       state.held[channel] = rssi;
       continue;
     }
 
     state.smoothed[channel] = state.smoothed[channel] * spectrumRetention + rssi * spectrumIncoming;
-    state.waterfallSmoothed[channel] = state.waterfallSmoothed[channel] * waterfallRetention
-      + rssi * waterfallIncoming;
+    state.waterfallPeak[channel] = Math.max(state.waterfallPeak[channel], rssi);
     state.held[channel] = rssi > state.held[channel]
       ? rssi
       : state.held[channel] * spectrumRetention + rssi * spectrumIncoming;
@@ -350,13 +349,20 @@ function drawSpectrum() {
 function appendWaterfallRow() {
   historyContext.drawImage(historyCanvas, 0, 0, PACKET_SIZE, HISTORY_ROWS - 1, 0, 1, PACKET_SIZE, HISTORY_ROWS - 1);
 
+  const retention = state.waterfallSmoothingRetention;
+  const incoming = 1 - retention;
   for (let channel = 0; channel < PACKET_SIZE; channel += 1) {
+    const observed = state.waterfallPeak[channel];
+    state.waterfallSmoothed[channel] = observed > state.waterfallSmoothed[channel]
+      ? observed
+      : state.waterfallSmoothed[channel] * retention + observed * incoming;
     const sourceOffset = rssiToColorIndex(state.waterfallSmoothed[channel]) * 4;
     const destinationOffset = channel * 4;
     historyRow.data[destinationOffset] = colorLut[sourceOffset];
     historyRow.data[destinationOffset + 1] = colorLut[sourceOffset + 1];
     historyRow.data[destinationOffset + 2] = colorLut[sourceOffset + 2];
     historyRow.data[destinationOffset + 3] = 255;
+    state.waterfallPeak[channel] = MIN_RSSI_DBM;
   }
   historyContext.putImageData(historyRow, 0, 0);
 }

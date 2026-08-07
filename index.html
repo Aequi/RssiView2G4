@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="dark">
   <title>RSSI Scan · 2.4 GHz spectrum</title>
   <meta name="description" content="A live, mobile-first 2.4 GHz spectrum and waterfall display for RssiDongle.">
-  <link rel="stylesheet" href="RssiWebUsb.css?v=8">
-  <script src="RssiWebUsb.js?v=8" defer></script>
+  <link rel="stylesheet" href="RssiWebUsb.css?v=11">
+  <script src="RssiWebUsb.js?v=11" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -118,33 +118,33 @@
         <div class="settings-heading">
           <p class="panel-kicker">Display tuning</p>
           <h2 id="settingsTitle">Responsive by default</h2>
-          <p>Tune spectrum response and waterfall history independently.</p>
+          <p>Tune spectrum response and waterfall persistence independently.</p>
         </div>
 
         <label class="range-control" for="smoothingInput">
           <span>
             <strong>Spectrum smoothing</strong>
-            <output id="smoothingValue" for="smoothingInput">90%</output>
+            <output id="smoothingValue" for="smoothingInput">85%</output>
           </span>
-          <input id="smoothingInput" type="range" min="0" max="97" value="90" step="1">
+          <input id="smoothingInput" type="range" min="0" max="97" value="85" step="1">
           <span class="range-ends"><small>Responsive</small><small>Stable</small></span>
         </label>
 
         <label class="range-control" for="waterfallSmoothingInput">
           <span>
-            <strong>Waterfall smoothing</strong>
-            <output id="waterfallSmoothingValue" for="waterfallSmoothingInput">90%</output>
+            <strong>Waterfall persistence</strong>
+            <output id="waterfallSmoothingValue" for="waterfallSmoothingInput">50%</output>
           </span>
-          <input id="waterfallSmoothingInput" type="range" min="0" max="97" value="90" step="1">
-          <span class="range-ends"><small>Detailed</small><small>Blended</small></span>
+          <input id="waterfallSmoothingInput" type="range" min="0" max="97" value="50" step="1">
+          <span class="range-ends"><small>Fast fade</small><small>Slow fade</small></span>
         </label>
 
         <label class="range-control" for="gainInput">
           <span>
             <strong>Waterfall gain</strong>
-            <output id="gainValue" for="gainInput">70%</output>
+            <output id="gainValue" for="gainInput">0%</output>
           </span>
-          <input id="gainInput" type="range" min="0" max="100" value="70" step="1">
+          <input id="gainInput" type="range" min="0" max="100" value="0" step="1">
           <span class="range-ends"><small>Natural</small><small>Bright</small></span>
         </label>
 
