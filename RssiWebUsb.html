@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080b10">
+  <meta name="color-scheme" content="dark">
+  <title>RSSI Scan · 2.4 GHz spectrum</title>
+  <meta name="description" content="A live, mobile-first 2.4 GHz spectrum and waterfall display for RssiDongle.">
+  <link rel="stylesheet" href="RssiWebUsb.css?v=3">
+  <script src="RssiWebUsb.js?v=3" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="RSSI Scan home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span>
+          <strong>RSSI Scan</strong>
+          <small>2.4 GHz spectrum</small>
+        </span>
+      </a>
+
+      <div class="connection-actions">
+        <span class="status-pill" id="statusPill" data-state="idle">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusText">Offline</span>
+        </span>
+        <button class="primary-button" id="connectButton" type="button">
+          <span id="connectLabel">Connect</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="intro-panel" aria-labelledby="pageTitle">
+        <div class="intro-copy">
+          <p class="eyebrow"><span class="live-beacon" aria-hidden="true"></span> Live RF monitor</p>
+          <h1 id="pageTitle">See the air around you.</h1>
+          <p>Track energy across all 51 channels from 2400 to 2500 MHz, directly from your RssiDongle.</p>
+        </div>
+
+        <div class="metrics" aria-label="Live scan metrics">
+          <article class="metric">
+            <span>Strongest</span>
+            <strong id="peakRssi">—</strong>
+            <small id="peakFrequency">Waiting for data</small>
+          </article>
+          <article class="metric">
+            <span>Noise floor</span>
+            <strong id="noiseFloor">—</strong>
+            <small>Median across sweep</small>
+          </article>
+          <article class="metric">
+            <span>Sweep rate</span>
+            <strong id="packetRate">—</strong>
+            <small id="packetTotal">0 sweeps received</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="dashboard-grid" aria-label="RSSI visualizations">
+        <article class="panel spectrum-panel">
+          <header class="panel-header">
+            <div>
+              <p class="panel-kicker">Instant view</p>
+              <h2>Spectrum</h2>
+            </div>
+            <div class="channel-readout" aria-live="polite">
+              <span id="selectedFrequency">— MHz</span>
+              <strong id="selectedRssi">— dBm</strong>
+            </div>
+          </header>
+
+          <div class="canvas-wrap spectrum-wrap" id="spectrumWrap">
+            <canvas id="spectrumCanvas" role="img" aria-label="Live RSSI spectrum from 2400 to 2500 megahertz"></canvas>
+            <div class="empty-state" id="emptyState">
+              <span class="empty-icon" aria-hidden="true"></span>
+              <strong>Connect your RssiDongle</strong>
+              <small>Use Chrome or Edge on desktop or Android.</small>
+            </div>
+          </div>
+
+          <footer class="axis-caption">
+            <span>2400 MHz</span>
+            <span>2 MHz resolution · 51 channels</span>
+            <span>2500 MHz</span>
+          </footer>
+        </article>
+
+        <article class="panel waterfall-panel">
+          <header class="panel-header">
+            <div>
+              <p class="panel-kicker">Signal history</p>
+              <h2>Waterfall</h2>
+            </div>
+            <div class="panel-actions">
+              <button class="icon-button" id="clearButton" type="button" aria-label="Clear waterfall history">Clear</button>
+              <button class="icon-button" id="freezeButton" type="button" aria-pressed="false">Freeze</button>
+            </div>
+          </header>
+
+          <div class="canvas-wrap waterfall-wrap" id="waterfallWrap">
+            <canvas id="waterfallCanvas" role="img" aria-label="Scrolling RSSI waterfall history"></canvas>
+            <span class="time-label time-label-old">Older</span>
+            <span class="time-label time-label-now">Now</span>
+          </div>
+
+          <footer class="heat-legend" aria-label="Waterfall signal scale">
+            <span>Quiet</span>
+            <span class="heat-gradient" aria-hidden="true"></span>
+            <span>Strong</span>
+          </footer>
+        </article>
+      </section>
+
+      <section class="settings-panel" aria-labelledby="settingsTitle">
+        <div class="settings-heading">
+          <p class="panel-kicker">Display tuning</p>
+          <h2 id="settingsTitle">Responsive by default</h2>
+          <p>Peak response is immediate. Smoothing controls how gently signals decay and settle.</p>
+        </div>
+
+        <label class="range-control" for="smoothingInput">
+          <span>
+            <strong>Smoothing</strong>
+            <output id="smoothingValue" for="smoothingInput">90%</output>
+          </span>
+          <input id="smoothingInput" type="range" min="0" max="97" value="90" step="1">
+          <span class="range-ends"><small>Responsive</small><small>Stable</small></span>
+        </label>
+
+        <label class="select-control" for="waterfallRate">
+          <span>
+            <strong>Waterfall speed</strong>
+            <small>Rows added per second</small>
+          </span>
+          <select id="waterfallRate">
+            <option value="15">15 fps</option>
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="compatibility" id="compatibilityNote" hidden>
+        <strong>WebUSB is unavailable in this browser.</strong>
+        <span id="compatibilityText">Open this page in Chrome or Edge on desktop or Android. iPhone and iPad browsers currently do not expose WebUSB.</span>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>RssiDongle · WebUSB bulk IN · 51-byte sweep</span>
+      <span id="deviceIdentity">VID AAAA · PID BBBB</span>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
